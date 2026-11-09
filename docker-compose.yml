@@ -1,0 +1,7 @@
+services:
+  aas-environment:
+    image: eclipsebasyx/aas-environment:2.0.0-SNAPSHOT
+    ports:
+      - "8081:8081"
+    environment:
+      - BASYX_CORS_ALLOWED_ORIGINS=*

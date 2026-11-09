@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>AAS Support & Traceability Bot</title>
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background-color: #212121; color: #ececec; display: flex; height: 100vh; }
+        .sidebar { width: 280px; background-color: #171717; padding: 20px; display: flex; flex-direction: column; gap: 15px; border-right: 1px solid #333; overflow-y: auto; }
+        .sidebar h2 { font-size: 14px; color: #888; text-transform: uppercase; margin: 0; letter-spacing: 1px; }
+        .server-info { font-size: 12px; color: #aaa; word-wrap: break-word; line-height: 1.6; }
+        
+        .chat-container { flex-grow: 1; display: flex; flex-direction: column; }
+        .chat-header { padding: 15px 20px; border-bottom: 1px solid #333; font-size: 18px; font-weight: 600; text-align: center; }
+        .chat-box { flex-grow: 1; padding: 30px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+        
+        .message { display: flex; gap: 15px; max-width: 800px; margin: 0 auto; width: 100%; animation: fadeIn 0.3s ease-out; }
+        .message.user { flex-direction: row-reverse; }
+        .avatar { width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; }
+        .avatar.bot { background: linear-gradient(135deg, #ff8c00, #ff0080); }
+        .avatar.user { background: linear-gradient(135deg, #0078d7, #00c6ff); }
+        .message-content { padding: 15px 20px; border-radius: 8px; line-height: 1.6; max-width: 80%; box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
+        .bot .message-content { background-color: #2f2f2f; border-top-left-radius: 0; }
+        .user .message-content { background-color: #005a9e; border-top-right-radius: 0; color: white; }
+        
+        .timestamp { font-size: 12px; color: #aaa; margin-bottom: 8px; }
+        .user .timestamp { color: #d0e8ff; text-align: right; }
+        .highlight { font-weight: bold; color: #ff8c00; }
+        .warning-box { color: #ffcc00; background: rgba(255, 204, 0, 0.1); padding: 10px; border-radius: 6px; margin-top: 10px; border-left: 4px solid #ffcc00; font-weight: bold; }
+
+        /* Eingabefeld */
+        .input-area { padding: 20px; background-color: #171717; border-top: 1px solid #333; display: flex; gap: 10px; }
+        .chat-input { flex-grow: 1; padding: 15px; border-radius: 6px; border: 1px solid #444; background: #212121; color: white; font-size: 16px; outline: none; }
+        .chat-input:focus { border-color: #ff8c00; }
+        .send-btn { background: #ff8c00; color: white; border: none; padding: 0 25px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px; transition: background 0.2s; }
+        .send-btn:hover { background: #e67e00; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <h2>Digitaler Produktpass (Kleber)</h2>
+        <hr style="border-color: #333; margin: 5px 0; width: 100%;">
+        <div class="server-info" id="dppInfo">Lade DPP-Datenbank...</div>
+    </div>
+
+    <div class="chat-container">
+        <div class="chat-header">AAS Support- & Diagnose-Bot</div>
+        <div class="chat-box" id="chatBox">
+            <div class="message bot">
+                <div class="avatar bot">KI</div>
+                <div class="message-content">
+                    <div class="timestamp">System</div>
+                    Guten Tag. Ich bin das Diagnose-System des Herstellers. Bitte beschreiben Sie das Problem mit dem Produkt und nennen Sie die Chargen-Nummer (z.B. Charge 01).
+                </div>
+            </div>
+        </div>
+        <div class="input-area">
+            <input type="text" id="userInput" class="chat-input" placeholder="Nachricht an den Support eingeben..." onkeypress="handleKeyPress(event)">
+            <button class="send-btn" onclick="senden()">Senden</button>
+        </div>
+    </div>
+
+    <script>
+        const chatBox = document.getElementById('chatBox');
+        const userInput = document.getElementById('userInput');
+
+        // DPP LADEN (für die Seitenleiste)
+        function ladeDPP() {
+            const dppId = "https://htw-dresden.de/aas/produktion/01/sm/dpp";
+            const base64DppId = btoa(dppId).replace(/\+/g, '-').replace(/\//g, '_');
+            fetch(`http://localhost:8081/submodels/${base64DppId}`, { cache: 'no-store' })
+                .then(r => r.ok ? r.json() : Promise.reject("Nicht gefunden"))
+                .then(data => {
+                    if(data.submodelElements) {
+                        let html = "";
+                        data.submodelElements.forEach(el => { html += `<strong style="color:#ececec">${el.idShort.replace(/_/g, ' ')}:</strong><br>${el.value}<br><br>`; });
+                        document.getElementById('dppInfo').innerHTML = html;
+                    }
+                }).catch(e => { document.getElementById('dppInfo').innerHTML = `<span style="color:#ffcc00;">⚠️ DPP nicht gefunden.</span>`; });
+        }
+
+        // NACHRICHT HINZUFÜGEN (User oder Bot)
+        function addMessage(text, sender, warnung = "") {
+            const isUser = sender === 'user';
+            const html = `
+                <div class="message ${sender}">
+                    <div class="avatar ${sender}">${isUser ? 'K' : 'KI'}</div>
+                    <div class="message-content">
+                        <div class="timestamp">${isUser ? 'Kunde' : 'Traceability Bot'}</div>
+                        ${text}
+                        ${warnung}
+                    </div>
+                </div>
+            `;
+            chatBox.insertAdjacentHTML('beforeend', html);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // ENTER-TASTE ABFANGEN
+        function handleKeyPress(e) { if (e.key === 'Enter') senden(); }
+
+        // CHAT-LOGIK: KUNDE SENDET -> KI SUCHT NACH CHARGE
+        function senden() {
+            const text = userInput.value.trim();
+            if (!text) return;
+            
+            addMessage(text, 'user');
+            userInput.value = "";
+            
+            // Textanalyse: Sucht nach dem Wort "Charge" gefolgt von Ziffern (z.B. "Charge 01" oder "Charge 02")
+            const treffer = text.match(/Charge\s*(\d+)/i);
+            const chargeNummer = treffer ? treffer[1] : null;
+
+            if (!chargeNummer) {
+                setTimeout(() => addMessage("Bitte nennen Sie mir die exakte Chargen-Nummer (z. B. 'Charge 01'), damit ich die korrekte Verwaltungsschale im System lokalisieren kann.", 'bot'), 800);
+                return;
+            }
+            
+            setTimeout(() => {
+                addMessage(`Ich verbinde mich mit der Verwaltungsschale (AAS) der Charge ${chargeNummer} und überprüfe die historischen Prozessdaten...`, 'bot');
+                setTimeout(() => analysiereAAS(chargeNummer), 1500);
+            }, 800);
+        }
+
+        // DATEN DYNAMISCH AUS DEM BACKEND HOLEN
+        function analysiereAAS(chargeNummer) {
+            // Die ID wird hier dynamisch mit der erkannten Nummer zusammengebaut
+            const submodelId = `https://htw-dresden.de/aas/produktion/${chargeNummer}/sm/prozess`;
+            const base64Id = btoa(submodelId).replace(/\+/g, '-').replace(/\//g, '_');
+            const urlTemp = `http://localhost:8081/submodels/${base64Id}/submodel-elements/Ofentemperatur`;
+            
+            fetch(urlTemp, { cache: 'no-store' })
+                .then(r => {
+                    if (!r.ok) throw new Error("AAS nicht gefunden");
+                    return r.json();
+                })
+                .then(data => {
+                    const temp = parseFloat(data.value);
+                    let antwort = `Die Traceability-Analyse für Charge ${chargeNummer} ist abgeschlossen.`;
+                    let warnung = temp < 78.0 
+                        ? `<div class="warning-box">⚠️ Ursache gefunden: Temperaturabfall im Prozess!<br>Die protokollierte Ofentemperatur betrug nur <span style="color:white">${temp} °C</span> (Soll: 80 °C).<br>Analyse: Der Wert lag knapp im Grenzbereich. Das Bauteil wurde fehlerhaft ausgehärtet.</div>`
+                        : `<div class="warning-box" style="border-color:#4caf50; color:#4caf50;">Prozessparameter im grünen Bereich (Temp: ${temp} °C). Keine Anomalien dokumentiert.</div>`;
+                    
+                    addMessage(antwort, 'bot', warnung);
+                })
+                .catch(e => addMessage(`Fehler: Die Verwaltungsschale für Charge ${chargeNummer} existiert nicht auf dem Server.`, 'bot'));
+        }
+        ladeDPP();
+    </script>
+</body>
+</html>
